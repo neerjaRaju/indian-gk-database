@@ -46,7 +46,7 @@ The optional generation flow uses `scripts/collect_sources.py` to fetch source t
 3. Run `python scripts/collect_sources.py`, then `python scripts/generate_questions.py --category economy --count 2`.
 4. Review the generated questions for accuracy and Hindi translation. Validate/build a candidate with `python scripts/validate_database.py --include-generated` and `python scripts/build_database.py --include-generated`.
 
-The `Generate database candidate` GitHub Actions workflow runs manually from the Actions tab and uploads a candidate artifact. It does not commit or release generated questions. The source catalogue starts empty and must be populated with reviewed sources before generation can run.
+The `Generate database candidate` GitHub Actions workflow runs manually from the Actions tab and uploads a candidate artifact. It does not commit or release generated questions. The source catalogue contains one reviewed economy resource; add and review more entries for other categories as needed.
 
 ## GitHub setup
 

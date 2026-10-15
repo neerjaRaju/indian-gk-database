@@ -1,12 +1,13 @@
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import date
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +66,11 @@ def validate_source(source, allowed_categories):
         parsed = urlparse(source[field])
         if parsed.scheme != "https" or not parsed.netloc:
             raise ValueError(f"{field} must be an absolute HTTPS URL")
+    if "api_resource_id" in source:
+        if urlparse(source["url"]).hostname not in {"data.gov.in", "www.data.gov.in"}:
+            raise ValueError("api_resource_id is supported only for data.gov.in resources")
+        if not re.fullmatch(r"[0-9a-fA-F-]{36}", source["api_resource_id"]):
+            raise ValueError("api_resource_id must be a UUID")
 
 
 def fetch_text(source):
@@ -93,6 +99,27 @@ def fetch_text(source):
     return final_url, text
 
 
+def fetch_ogd_records(source):
+    api_key = os.environ.get("DATA_GOV_API_KEY")
+    if not api_key:
+        raise ValueError("set DATA_GOV_API_KEY to fetch data.gov.in table rows")
+    endpoint = f"https://api.data.gov.in/resource/{source['api_resource_id']}?{urlencode({'api-key': api_key, 'format': 'json', 'limit': 100})}"
+    request = Request(endpoint, headers={"User-Agent": "IndianGKDatabaseSourceCollector/1.0", "Accept": "application/json"})
+    with urlopen(request, timeout=30) as response:
+        content_type = response.headers.get_content_type()
+        if content_type != "application/json":
+            raise ValueError(f"data.gov.in API returned unsupported content type {content_type!r}")
+        raw = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise ValueError(f"API response exceeds {MAX_RESPONSE_BYTES} bytes")
+    payload = json.loads(raw.decode("utf-8"))
+    records = payload.get("records") if isinstance(payload, dict) else None
+    if not isinstance(records, list) or not records:
+        raise ValueError("data.gov.in API returned no records")
+    text = json.dumps(records, ensure_ascii=False, separators=(",", ":"))
+    return source["url"], text
+
+
 def main():
     parser = argparse.ArgumentParser(description="Collect text only from explicitly reviewed, reuse-approved sources.")
     parser.add_argument("--catalog", type=Path, default=DEFAULT_CATALOG)
@@ -113,7 +140,10 @@ def main():
             if item["id"] in seen_ids:
                 raise ValueError(f"duplicate source id {item['id']!r}")
             seen_ids.add(item["id"])
-            url, text = fetch_text(item)
+            if item.get("api_resource_id"):
+                url, text = fetch_ogd_records(item)
+            else:
+                url, text = fetch_text(item)
             collected.append({
                 "id": item["id"],
                 "category": item["category"],
