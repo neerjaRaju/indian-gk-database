@@ -2,14 +2,8 @@ name: Generate and release question drafts
 
 on:
   schedule:
-    - cron: "0 3 * * 1"
+    - cron: "0 3 * * *"
   workflow_dispatch:
-    inputs:
-      count:
-        description: Bilingual question pairs to generate per category
-        required: true
-        default: "500"
-        type: number
 
 permissions:
   contents: write
@@ -58,7 +52,7 @@ jobs:
       - name: Generate every category
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          QUESTION_COUNT: ${{ inputs.count || 500 }}
+          QUESTION_COUNT: "10"
         shell: bash
         run: |
           set -euo pipefail
@@ -84,7 +78,7 @@ jobs:
       - name: Publish category files as a draft prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          QUESTION_COUNT: ${{ inputs.count || 500 }}
+          QUESTION_COUNT: "10"
         shell: bash
         run: |
           set -euo pipefail
