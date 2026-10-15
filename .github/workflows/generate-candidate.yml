@@ -1,41 +1,27 @@
-name: Generate database candidate
+name: Generate and release question drafts
 
 on:
+  schedule:
+    - cron: "0 3 * * 1"
   workflow_dispatch:
     inputs:
-      category:
-        description: Category to generate
-        required: true
-        type: choice
-        options:
-          - history
-          - geography
-          - polity
-          - economy
-          - science
-          - environment
-          - culture
-          - sports
-          - awards
-          - current_affairs
-          - miscellaneous
       count:
-        description: Number of question pairs to generate
+        description: Bilingual question pairs to generate per category
         required: true
-        default: "2"
+        default: "500"
         type: number
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: generate-candidate-${{ github.ref }}
+  group: generate-question-drafts
   cancel-in-progress: false
 
 jobs:
-  generate-candidate:
+  generate-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 360
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,31 +35,47 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Generate bilingual questions with Gemini
+      - name: Generate every category
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: >-
-          python scripts/generate_questions.py
-          --category "${{ inputs.category }}"
-          --count "${{ inputs.count }}"
+          QUESTION_COUNT: ${{ inputs.count || 500 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r category; do
+            echo "Generating ${QUESTION_COUNT} bilingual pairs for ${category}"
+            python scripts/generate_questions.py \
+              --category "$category" \
+              --count "$QUESTION_COUNT"
+            sleep 4
+          done < <(python -c 'import json; print("\n".join(item["id"] for item in json.load(open("config/categories.json", encoding="utf-8"))))')
 
-      - name: Validate source and generated records
+      - name: Validate all generated records
         run: |
           python scripts/validate_database.py --include-generated
           python scripts/verify_sources.py
           pytest -q
 
-      - name: Build review candidate
+      - name: Build combined database
         env:
-          DATABASE_VERSION: candidate-${{ github.sha }}
+          DATABASE_VERSION: ai-draft-${{ github.sha }}
         run: python scripts/build_database.py --include-generated
 
-      - name: Upload candidate for editorial review
-        uses: actions/upload-artifact@v4
-        with:
-          name: indian-gk-candidate-${{ inputs.category }}-${{ github.sha }}
-          path: |
-            dist/
-            data/generated/${{ inputs.category }}.json
-          if-no-files-found: error
-          retention-days: 14
+      - name: Publish category files as a draft prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QUESTION_COUNT: ${{ inputs.count || 500 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="ai-draft-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$TAG" \
+            data/generated/*.json \
+            dist/category-*.json \
+            dist/questions.en.json \
+            dist/questions.hi.json \
+            dist/questions.json.gz \
+            dist/manifest.json \
+            --prerelease \
+            --title "AI-generated bilingual question drafts $TAG" \
+            --notes "Generated ${QUESTION_COUNT} English/Hindi question pairs for every configured category. These are AI-generated drafts; verify facts, citations, licenses, and translations before production use."

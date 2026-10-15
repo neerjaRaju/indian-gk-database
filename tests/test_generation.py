@@ -5,7 +5,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from urllib.error import HTTPError
 
 from scripts.collect_sources import validate_source
-from scripts.generate_questions import call_gemini, records_for, validate_pair
+from scripts.generate_questions import call_gemini, generate_pairs, records_for, validate_pair
 from pathlib import Path
 import json
 
@@ -87,6 +87,41 @@ def test_gemini_only_pair_becomes_unverified_review_draft():
     schema = json.loads((ROOT / "data" / "schema" / "question.schema.json").read_text(encoding="utf-8"))
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     assert all(not list(validator.iter_errors(record)) for record in records)
+
+
+def test_generation_batches_more_than_twenty_pairs(monkeypatch):
+    calls = []
+
+    def fake_call_gemini(prompt, api_key, model):
+        count = int(prompt.split("Create exactly ", 1)[1].split(" ", 1)[0])
+        start = sum(call[0] for call in calls)
+        calls.append((count, prompt))
+        return {"questions": [
+            {
+                "slug": f"history-fact-{index}",
+                "difficulty": "easy",
+                "question_en": f"English question {index}?",
+                "options_en": ["A", "B", "C", "D"],
+                "question_hi": f"हिंदी प्रश्न {index}?",
+                "options_hi": ["क", "ख", "ग", "घ"],
+                "answer_index": 0,
+                "explanation_en": "Supported explanation.",
+                "explanation_hi": "समर्थित स्पष्टीकरण।",
+                "tags": ["history"],
+                "source_title": "Suggested official source",
+                "source_url": "https://example.gov.in/history",
+                "source_publisher": "Example Government Publisher",
+            }
+            for index in range(start, start + count)
+        ]}
+
+    monkeypatch.setattr("scripts.generate_questions.call_gemini", fake_call_gemini)
+
+    pairs = generate_pairs("history", 21, "test-key", "test-model")
+
+    assert len(pairs) == 21
+    assert [call[0] for call in calls] == [20, 1]
+    assert "history-fact-0" in calls[1][1]
 
 
 def test_generator_rejects_non_object_pair():

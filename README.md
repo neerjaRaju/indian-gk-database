@@ -39,14 +39,14 @@ Generated output appears in `dist/`: full database, English-only and Hindi-only 
 
 ## Generate a review candidate with Gemini
 
-The generation flow uses Gemini directly to create English/Hindi MCQ pairs; it does not require a data.gov.in API key or source catalogue. Generated records stay in `data/generated/` until an editor verifies the facts, suggested citations, license, and Hindi translation, then promotes them into `data/source/`. The normal CI and release workflows only use reviewed source files.
+The generation flow uses Gemini directly to create English/Hindi MCQ pairs; it does not require a data.gov.in API key or source catalogue. Generated records stay in `data/generated/` until an editor verifies the facts, suggested citations, license, and Hindi translation, then promotes them into `data/source/`. The normal production release workflow only uses reviewed source files.
 
-1. Set `GEMINI_API_KEY` in the local environment, or add it as a repository Actions secret named `GEMINI_API_KEY` for the manual workflow.
-2. Run `python scripts/generate_questions.py --category economy --count 2`, or start `Generate database candidate` from the Actions tab.
-3. Review each generated fact, suggested source URL, license, and Hindi translation. Gemini-suggested citations are not verified; generated records use `Unverified; editorial review required` as the license until a human checks and replaces it.
-4. Validate/build a review candidate with `python scripts/validate_database.py --include-generated` and `python scripts/build_database.py --include-generated`.
+1. Add the rotated `GEMINI_API_KEY` as a repository Actions secret.
+2. `Generate and release question drafts` runs every Monday at 03:00 UTC and generates 500 bilingual pairs for every configured category. A bilingual pair becomes two records, English and Hindi.
+3. To run it immediately, use Actions → `Generate and release question drafts` → Run workflow. The optional count defaults to 500 pairs per category.
+4. Each successful run creates an `ai-draft-*` GitHub prerelease with generated category JSON files and combined database files. Review each fact, suggested source URL, license, and Hindi translation before production use. Gemini-suggested citations are not verified; records use `Unverified; editorial review required`.
 
-The `Generate database candidate` GitHub Actions workflow runs manually from the Actions tab and uploads a candidate artifact. It does not commit or release generated questions. `scripts/collect_sources.py` remains available for optional source-grounded runs: add reviewed HTTPS HTML/plain-text sources to `config/source_catalog.json`, collect them, then pass `--sources data/collected/sources.json` to the generator. That optional path uses no data.gov.in API key.
+The schedule needs `GEMINI_API_KEY` and repository Actions permission to create releases. `scripts/collect_sources.py` remains available for optional source-grounded runs: add reviewed HTTPS HTML/plain-text sources to `config/source_catalog.json`, collect them, then pass `--sources data/collected/sources.json` to the generator. That optional path uses no data.gov.in API key.
 
 ## GitHub setup
 
