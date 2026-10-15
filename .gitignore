@@ -4,4 +4,6 @@ __pycache__/
 venv/
 dist/*
 !dist/.gitkeep
+data/collected/*.json
+data/generated/*.json
 *.pyc

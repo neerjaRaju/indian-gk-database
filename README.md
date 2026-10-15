@@ -13,7 +13,7 @@ Each record includes:
 - `category`, `difficulty`, `type`, `language`
 - `question`, `options`, `answer_index`, `explanation`
 - `tags`
-- `source` metadata (`title`, `url`, `publisher`, `accessed_on`, `license`)
+- `source` metadata (`title`, `url`, `publisher`, `accessed_on`, `license`; optional `license_url`)
 - `updated_at`
 
 English and Hindi are separate records with distinct IDs. If they are translations of the same fact, add a shared `translation_group_id` field only after updating the JSON Schema and validator.
@@ -36,6 +36,17 @@ python scripts/build_database.py
 ```
 
 Generated output appears in `dist/`: full database, English-only and Hindi-only JSON, per-category JSON, gzip JSON, and `manifest.json` with SHA-256 checksums.
+
+## Generate a review candidate with Gemini
+
+The optional generation flow uses `scripts/collect_sources.py` to fetch source text and `scripts/generate_questions.py` to create English/Hindi MCQ pairs. Generated records stay in `data/generated/` until an editor reviews and promotes them into `data/source/`; the normal CI and release workflows only use reviewed source files.
+
+1. Add entries to `config/source_catalog.json` only after checking the source's reuse terms. Each entry needs `id`, `category`, `title`, `publisher`, `url`, `license`, `license_url`, and `reuse_approved: true`. The collector accepts only HTTPS HTML/plain-text pages and the license labels `CC0-1.0`, `CC-BY-4.0`, `Government Open Data License - India (GODL)`, or `Public Domain`. This allowlist does not replace a human license review.
+2. Set `GEMINI_API_KEY` in the local environment, or add it as a repository Actions secret named `GEMINI_API_KEY` for the manual workflow.
+3. Run `python scripts/collect_sources.py`, then `python scripts/generate_questions.py --category economy --count 2`.
+4. Review the generated questions for accuracy and Hindi translation. Validate/build a candidate with `python scripts/validate_database.py --include-generated` and `python scripts/build_database.py --include-generated`.
+
+The `Generate database candidate` GitHub Actions workflow runs manually from the Actions tab and uploads a candidate artifact. It does not commit or release generated questions. The source catalogue starts empty and must be populated with reviewed sources before generation can run.
 
 ## GitHub setup
 

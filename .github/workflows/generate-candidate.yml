@@ -1,0 +1,82 @@
+name: Generate database candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      category:
+        description: Category to generate
+        required: true
+        type: choice
+        options:
+          - history
+          - geography
+          - polity
+          - economy
+          - science
+          - environment
+          - culture
+          - sports
+          - awards
+          - current_affairs
+          - miscellaneous
+      count:
+        description: Question pairs per approved source
+        required: true
+        default: "2"
+        type: number
+
+permissions:
+  contents: read
+
+concurrency:
+  group: generate-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  generate-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Collect approved source material
+        run: python scripts/collect_sources.py
+
+      - name: Generate bilingual questions with Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: >-
+          python scripts/generate_questions.py
+          --category "${{ inputs.category }}"
+          --count "${{ inputs.count }}"
+
+      - name: Validate source and generated records
+        run: |
+          python scripts/validate_database.py --include-generated
+          python scripts/verify_sources.py
+          pytest -q
+
+      - name: Build review candidate
+        env:
+          DATABASE_VERSION: candidate-${{ github.sha }}
+        run: python scripts/build_database.py --include-generated
+
+      - name: Upload candidate for editorial review
+        uses: actions/upload-artifact@v4
+        with:
+          name: indian-gk-candidate-${{ inputs.category }}-${{ github.sha }}
+          path: |
+            dist/
+            data/generated/${{ inputs.category }}.json
+          if-no-files-found: error
+          retention-days: 14

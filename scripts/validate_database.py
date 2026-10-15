@@ -1,19 +1,27 @@
 import json
 import sys
+import argparse
 from pathlib import Path
 from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_DIR = ROOT / "data" / "source"
+GENERATED_DIR = ROOT / "data" / "generated"
 SCHEMA_PATH = ROOT / "data" / "schema" / "question.schema.json"
 ALLOWED_CATEGORIES = {x["id"] for x in json.loads((ROOT / "config/categories.json").read_text(encoding="utf-8"))}
 EXPECTED_TOTAL = int(__import__("os").environ.get("EXPECTED_QUESTION_COUNT", "0"))
 
 def main():
+    parser = argparse.ArgumentParser(description="Validate source question records.")
+    parser.add_argument("--include-generated", action="store_true", help="also validate data/generated/ review records")
+    args = parser.parse_args()
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     errors, all_ids, total, languages = [], set(), 0, {"en": 0, "hi": 0}
-    files = sorted(SOURCE_DIR.glob("*.json"))
+    source_dirs = [SOURCE_DIR]
+    if args.include_generated:
+        source_dirs.append(GENERATED_DIR)
+    files = sorted(path for directory in source_dirs for path in directory.glob("*.json"))
     if not files:
         errors.append("No source JSON files found.")
     for path in files:
