@@ -21,6 +21,41 @@ MAX_API_ATTEMPTS = 4
 MAX_QUESTION_PAIRS = 500
 MAX_PAIRS_PER_REQUEST = 20
 MIN_BATCH_DELAY_SECONDS = 4
+MAX_BATCH_VALIDATION_ATTEMPTS = 2
+
+QUESTION_RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "questions": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "slug": {"type": "STRING"},
+                    "difficulty": {"type": "STRING", "enum": ["easy", "medium", "hard"]},
+                    "question_en": {"type": "STRING"},
+                    "options_en": {"type": "ARRAY", "items": {"type": "STRING"}, "minItems": 4, "maxItems": 4},
+                    "question_hi": {"type": "STRING"},
+                    "options_hi": {"type": "ARRAY", "items": {"type": "STRING"}, "minItems": 4, "maxItems": 4},
+                    "answer_index": {"type": "INTEGER", "minimum": 0, "maximum": 3},
+                    "explanation_en": {"type": "STRING"},
+                    "explanation_hi": {"type": "STRING"},
+                    "tags": {"type": "ARRAY", "items": {"type": "STRING"}},
+                    "source_title": {"type": "STRING"},
+                    "source_url": {"type": "STRING"},
+                    "source_publisher": {"type": "STRING"},
+                },
+                "required": [
+                    "slug", "difficulty", "question_en", "options_en",
+                    "question_hi", "options_hi", "answer_index", "explanation_en",
+                    "explanation_hi", "tags", "source_title", "source_url",
+                    "source_publisher",
+                ],
+            },
+        },
+    },
+    "required": ["questions"],
+}
 
 
 def prompt_for(category, count, source=None, exclude_slugs=()):
@@ -53,7 +88,11 @@ Return only valid JSON with this shape:
 def call_gemini(prompt, api_key, model):
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 0.2},
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": QUESTION_RESPONSE_SCHEMA,
+            "temperature": 0.2,
+        },
     }
     models = tuple(dict.fromkeys((model, *FALLBACK_MODELS)))
     result = None
@@ -140,20 +179,39 @@ def generate_pairs(category, count, api_key, model, source=None):
         if pairs:
             time.sleep(MIN_BATCH_DELAY_SECONDS)
         batch_count = min(MAX_PAIRS_PER_REQUEST, count - len(pairs))
-        response = call_gemini(
-            prompt_for(category, batch_count, source, used_slugs),
-            api_key,
-            model,
-        )
-        batch = response.get("questions")
-        if not isinstance(batch, list) or len(batch) != batch_count:
-            raise ValueError(f"expected exactly {batch_count} question pairs in generated batch")
-        for pair in batch:
-            validate_pair(pair, require_citation=source is None)
-            slug = normalize_slug(pair["slug"])
-            if slug in used_slugs:
-                raise ValueError(f"Gemini generated duplicate slug {slug!r}; rerun this category")
-            used_slugs.add(slug)
+        batch = None
+        validation_error = None
+        for validation_attempt in range(MAX_BATCH_VALIDATION_ATTEMPTS):
+            prompt = prompt_for(category, batch_count, source, used_slugs)
+            if validation_error:
+                prompt += (
+                    "\nYour previous response failed validation: "
+                    f"{validation_error}. Regenerate the entire batch and strictly follow "
+                    "the required JSON schema. In particular options_en and options_hi "
+                    "must each be arrays of exactly four strings."
+                )
+            response = call_gemini(prompt, api_key, model)
+            candidate_batch = response.get("questions")
+            try:
+                if not isinstance(candidate_batch, list) or len(candidate_batch) != batch_count:
+                    raise ValueError(f"expected exactly {batch_count} question pairs in generated batch")
+                candidate_slugs = set()
+                for pair in candidate_batch:
+                    validate_pair(pair, require_citation=source is None)
+                    slug = normalize_slug(pair["slug"])
+                    if slug in used_slugs or slug in candidate_slugs:
+                        raise ValueError(f"Gemini generated duplicate slug {slug!r}")
+                    candidate_slugs.add(slug)
+                batch = candidate_batch
+                used_slugs.update(candidate_slugs)
+                break
+            except ValueError as exc:
+                validation_error = str(exc)
+                if validation_attempt == MAX_BATCH_VALIDATION_ATTEMPTS - 1:
+                    raise ValueError(
+                        f"generated batch failed validation after "
+                        f"{MAX_BATCH_VALIDATION_ATTEMPTS} attempts: {validation_error}"
+                    ) from None
         pairs.extend(batch)
     return pairs
 

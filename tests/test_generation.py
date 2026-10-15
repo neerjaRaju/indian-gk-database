@@ -124,6 +124,39 @@ def test_generation_batches_more_than_twenty_pairs(monkeypatch):
     assert "history-fact-0" in calls[1][1]
 
 
+def test_generation_regenerates_batch_with_non_array_options(monkeypatch):
+    valid_pair = {
+        "slug": "geography-river-source",
+        "difficulty": "easy",
+        "question_en": "Which river rises in the Himalayas?",
+        "options_en": ["Ganga", "Godavari", "Kaveri", "Narmada"],
+        "question_hi": "कौन-सी नदी हिमालय से निकलती है?",
+        "options_hi": ["गंगा", "गोदावरी", "कावेरी", "नर्मदा"],
+        "answer_index": 0,
+        "explanation_en": "The Ganga rises in the Himalayas.",
+        "explanation_hi": "गंगा हिमालय से निकलती है।",
+        "tags": ["rivers"],
+        "source_title": "Suggested geography source",
+        "source_url": "https://example.gov.in/rivers",
+        "source_publisher": "Example Government Publisher",
+    }
+    malformed_pair = {**valid_pair, "options_en": "Ganga, Godavari, Kaveri, Narmada"}
+    prompts = []
+
+    def fake_call_gemini(prompt, api_key, model):
+        prompts.append(prompt)
+        pair = malformed_pair if len(prompts) == 1 else valid_pair
+        return {"questions": [pair]}
+
+    monkeypatch.setattr("scripts.generate_questions.call_gemini", fake_call_gemini)
+
+    pairs = generate_pairs("geography", 1, "test-key", "test-model")
+
+    assert len(pairs) == 1
+    assert len(prompts) == 2
+    assert "previous response failed validation" in prompts[1]
+
+
 def test_generator_rejects_non_object_pair():
     with pytest.raises(ValueError, match="must be an object"):
         validate_pair([])

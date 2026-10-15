@@ -35,7 +35,17 @@ pytest -q
 python scripts/build_database.py
 ```
 
-Generated output appears in `dist/`: full database, English-only and Hindi-only JSON, per-category JSON, gzip JSON, and `manifest.json` with SHA-256 checksums.
+Generated output appears in `dist/`: full database, English-only and Hindi-only JSON, per-category JSON, gzip JSON, a categorized SQLite database, and `manifest.json` with SHA-256 checksums.
+
+The SQLite artifact is `dist/questions.sqlite3`. It has a `categories` table (`id`, `name_en`, `name_hi`) and a `questions` table with one row per language record and a `category_id` foreign key. `options_json`, `tags_json`, and `source_json` contain JSON text. Example category query:
+
+```sql
+SELECT c.name_en, q.language, q.question, q.options_json, q.answer_index
+FROM questions AS q
+JOIN categories AS c ON c.id = q.category_id
+WHERE q.category_id = 'history'
+ORDER BY q.language, q.id;
+```
 
 ## Generate a review candidate with Gemini
 

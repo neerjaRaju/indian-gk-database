@@ -74,6 +74,7 @@ jobs:
             dist/category-*.json \
             dist/questions.en.json \
             dist/questions.hi.json \
+            dist/questions.sqlite3 \
             dist/questions.json.gz \
             dist/manifest.json \
             --prerelease \
