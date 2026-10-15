@@ -157,6 +157,41 @@ def test_generation_regenerates_batch_with_non_array_options(monkeypatch):
     assert "previous response failed validation" in prompts[1]
 
 
+def test_generation_retries_invalid_suggested_source_url(monkeypatch):
+    valid_pair = {
+        "slug": "environment-biodiversity",
+        "difficulty": "easy",
+        "question_en": "What does biodiversity describe?",
+        "options_en": ["Variety of life", "Rainfall", "Soil depth", "Wind speed"],
+        "question_hi": "जैव विविधता किसका वर्णन करती है?",
+        "options_hi": ["जीवन की विविधता", "वर्षा", "मिट्टी की गहराई", "हवा की गति"],
+        "answer_index": 0,
+        "explanation_en": "Biodiversity is the variety of living organisms.",
+        "explanation_hi": "जैव विविधता जीवों की विविधता है।",
+        "tags": ["biodiversity"],
+        "source_title": "Suggested environment source",
+        "source_url": "https://example.gov.in/environment",
+        "source_publisher": "Example Government Publisher",
+    }
+    prompts = []
+
+    def fake_call_gemini(prompt, api_key, model):
+        prompts.append(prompt)
+        pair = dict(valid_pair)
+        if len(prompts) < 3:
+            pair["source_url"] = "www.example.gov.in/environment"
+        return {"questions": [pair]}
+
+    monkeypatch.setattr("scripts.generate_questions.call_gemini", fake_call_gemini)
+
+    pairs = generate_pairs("environment", 1, "test-key", "test-model")
+
+    assert pairs[0]["source_url"] == valid_pair["source_url"]
+    assert len(prompts) == 3
+    assert "source_url must be an absolute HTTPS URL" in prompts[1]
+    assert "plain, absolute HTTPS URL with a hostname" in prompts[2]
+
+
 def test_generator_refreshes_sqlite_after_writing_category_json(tmp_path, monkeypatch):
     pair = {
         "slug": "history-founding-emperor",

@@ -22,7 +22,7 @@ MAX_API_ATTEMPTS = 4
 MAX_QUESTION_PAIRS = 500
 MAX_PAIRS_PER_REQUEST = 20
 MIN_BATCH_DELAY_SECONDS = 4
-MAX_BATCH_VALIDATION_ATTEMPTS = 2
+MAX_BATCH_VALIDATION_ATTEMPTS = 3
 
 QUESTION_RESPONSE_SCHEMA = {
     "type": "OBJECT",
@@ -188,8 +188,11 @@ def generate_pairs(category, count, api_key, model, source=None):
                 prompt += (
                     "\nYour previous response failed validation: "
                     f"{validation_error}. Regenerate the entire batch and strictly follow "
-                    "the required JSON schema. In particular options_en and options_hi "
-                    "must each be arrays of exactly four strings."
+                    "the required JSON schema. options_en and options_hi must each be "
+                    "arrays of exactly four strings. Every source_url must be a plain, "
+                    "absolute HTTPS URL with a hostname, for example "
+                    "https://www.example.gov.in/path; do not use markdown, omit the "
+                    "hostname, or add punctuation to the URL."
                 )
             response = call_gemini(prompt, api_key, model)
             candidate_batch = response.get("questions")
