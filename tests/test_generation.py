@@ -5,7 +5,15 @@ from jsonschema import Draft202012Validator, FormatChecker
 from urllib.error import HTTPError
 
 from scripts.collect_sources import validate_source
-from scripts.generate_questions import call_gemini, generate_pairs, main, records_for, validate_pair
+from scripts.generate_questions import (
+    call_gemini,
+    existing_slugs,
+    generate_pairs,
+    main,
+    merge_new_records_first,
+    records_for,
+    validate_pair,
+)
 from pathlib import Path
 import json
 
@@ -124,6 +132,44 @@ def test_generation_batches_more_than_twenty_pairs(monkeypatch):
     assert "history-fact-0" in calls[1][1]
 
 
+def test_existing_category_slugs_are_excluded_and_new_records_prepend(monkeypatch):
+    old_records = [
+        {"id": f"history-previous-question-{index}-{'en' if index % 2 == 0 else 'hi'}"}
+        for index in range(112)
+    ]
+    old_slugs = existing_slugs("history", old_records)
+    prompts = []
+
+    def fake_call_gemini(prompt, api_key, model):
+        prompts.append(prompt)
+        return {"questions": [{
+            "slug": "new-history-question",
+            "difficulty": "easy",
+            "question_en": "A new question?",
+            "options_en": ["A", "B", "C", "D"],
+            "question_hi": "नया प्रश्न?",
+            "options_hi": ["क", "ख", "ग", "घ"],
+            "answer_index": 0,
+            "explanation_en": "Explanation.",
+            "explanation_hi": "व्याख्या।",
+            "tags": ["history"],
+            "source_title": "Suggested source",
+            "source_url": "https://example.gov.in/history",
+            "source_publisher": "Example Publisher",
+        }]}
+
+    monkeypatch.setattr("scripts.generate_questions.call_gemini", fake_call_gemini)
+    pairs = generate_pairs("history", 1, "test-key", "test-model", excluded_slugs=old_slugs)
+    new_records = records_for(None, pairs, "2026-10-15", category="history")
+    merged = merge_new_records_first(new_records, old_records)
+
+    assert len(old_slugs) == 112
+    assert "previous-question-0" in prompts[0]
+    assert len(merged) == 114
+    assert merged[:2] == new_records
+    assert merged[2:] == old_records
+
+
 def test_generation_regenerates_batch_with_non_array_options(monkeypatch):
     valid_pair = {
         "slug": "geography-river-source",
@@ -213,23 +259,38 @@ def test_generator_refreshes_sqlite_after_writing_category_json(tmp_path, monkey
         "generate_questions.py", "--category", "history", "--count", "1",
         "--output-dir", str(tmp_path),
     ])
-    monkeypatch.setattr("scripts.generate_questions.generate_pairs", lambda *_args, **_kwargs: [pair])
+    existing_records = [
+        {"id": f"history-existing-question-{index}-en", "category": "history"}
+        for index in range(112)
+    ]
+    (tmp_path / "history.json").write_text(json.dumps(existing_records), encoding="utf-8")
+    generation_args = []
+
+    def fake_generate_pairs(*args, **kwargs):
+        generation_args.append((args, kwargs))
+        return [pair]
+
+    monkeypatch.setattr("scripts.generate_questions.generate_pairs", fake_generate_pairs)
     build_calls = []
 
     def fake_run(command, cwd, check):
-        build_calls.append((command, cwd, check, (tmp_path / "history.json").exists()))
+        output_records = json.loads((tmp_path / "history.json").read_text(encoding="utf-8"))
+        build_calls.append((command, cwd, check, output_records))
 
     monkeypatch.setattr("scripts.generate_questions.subprocess.run", fake_run)
 
     assert main() == 0
 
     assert len(build_calls) == 1
-    command, cwd, check, json_was_written = build_calls[0]
+    command, cwd, check, output_records = build_calls[0]
     assert Path(command[-2]).name == "build_database.py"
     assert command[-1] == "--include-generated"
     assert cwd == ROOT
     assert check is True
-    assert json_was_written is True
+    assert len(output_records) == 114
+    assert output_records[:2][0]["id"] == "history-history-founding-emperor-en"
+    assert output_records[2:] == existing_records
+    assert len(generation_args[0][1]["excluded_slugs"]) == 112
 
 
 def test_generator_rejects_non_object_pair():

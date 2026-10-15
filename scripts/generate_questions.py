@@ -173,9 +173,36 @@ def normalize_slug(value):
     return slug[:50].strip("-")
 
 
-def generate_pairs(category, count, api_key, model, source=None):
+def existing_slugs(category, records):
+    prefix = f"{normalize_slug(category)}-"
+    slugs = set()
+    for record in records:
+        question_id = record.get("id", "")
+        if not question_id.startswith(prefix):
+            continue
+        for suffix in ("-en", "-hi"):
+            if question_id.endswith(suffix):
+                slug = question_id[len(prefix):-len(suffix)]
+                if slug:
+                    slugs.add(slug)
+                break
+    return slugs
+
+
+def merge_new_records_first(new_records, existing_records):
+    merged = []
+    seen_ids = set()
+    for record in [*new_records, *existing_records]:
+        record_id = record["id"]
+        if record_id not in seen_ids:
+            merged.append(record)
+            seen_ids.add(record_id)
+    return merged
+
+
+def generate_pairs(category, count, api_key, model, source=None, excluded_slugs=()):
     pairs = []
-    used_slugs = set()
+    used_slugs = set(excluded_slugs)
     while len(pairs) < count:
         if pairs:
             time.sleep(MIN_BATCH_DELAY_SECONDS)
@@ -329,6 +356,13 @@ def main():
 
     try:
         generated = []
+        output = args.output_dir / f"{args.category}.json"
+        existing_records = []
+        if output.exists():
+            existing_records = json.loads(output.read_text(encoding="utf-8"))
+            if not isinstance(existing_records, list) or not all(isinstance(record, dict) for record in existing_records):
+                raise ValueError(f"existing generated file {output} must contain an array of question objects")
+        excluded = existing_slugs(args.category, existing_records)
         updated_at = date.today().isoformat()
         if args.sources:
             sources = json.loads(args.sources.read_text(encoding="utf-8"))
@@ -340,10 +374,11 @@ def main():
             if not selected:
                 raise ValueError(f"no collected sources found for category {args.category!r}")
             for source in selected:
-                pairs = generate_pairs(args.category, args.count, api_key, args.model, source)
+                pairs = generate_pairs(args.category, args.count, api_key, args.model, source, excluded)
+                excluded.update(normalize_slug(pair["slug"]) for pair in pairs)
                 generated.extend(records_for(source, pairs, updated_at))
         else:
-            pairs = generate_pairs(args.category, args.count, api_key, args.model)
+            pairs = generate_pairs(args.category, args.count, api_key, args.model, excluded_slugs=excluded)
             generated.extend(records_for(None, pairs, updated_at, category=args.category))
         ids = [record["id"] for record in generated]
         if len(ids) != len(set(ids)):
@@ -353,8 +388,8 @@ def main():
         return 1
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    output = args.output_dir / f"{args.category}.json"
-    output.write_text(json.dumps(generated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    accumulated = merge_new_records_first(generated, existing_records)
+    output.write_text(json.dumps(accumulated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     try:
         subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "build_database.py"), "--include-generated"],
@@ -364,7 +399,11 @@ def main():
     except subprocess.CalledProcessError as exc:
         print(f"Generated JSON, but SQLite database build failed with exit code {exc.returncode}.", file=sys.stderr)
         return 1
-    print(f"Generated {len(generated)} review-only records into {output} and refreshed dist/questions.sqlite3")
+    print(
+        f"Generated {len(generated)} new review-only records; retained "
+        f"{len(accumulated) - len(generated)} existing records in {output} "
+        "and refreshed dist/questions.sqlite3"
+    )
     return 0
 
 
