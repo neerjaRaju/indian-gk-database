@@ -94,6 +94,18 @@ A source being publicly accessible does **not** automatically mean its question 
 
 For production, use a versioned Release asset or a stable CDN URL, download to app storage, verify SHA-256 from the manifest, then parse JSON. For large datasets, prefer `questions.en.json` / `questions.hi.json` or category files instead of downloading all records. Add HTTP timeout/retry, cache versioning, and a last-known-good offline fallback. Static GitHub hosting has no write API, authentication system, or per-user progress storage.
 
+## Android app
+
+The Android-only Flutter client is in `app/`. At startup, its splash screen checks the latest stable GitHub Release, downloads `questions.sqlite3`, verifies the SHA-256 against `manifest.json`, checks SQLite integrity, and caches the database on-device. If refresh fails and a cached copy exists, it opens the cached database offline. The app supports English/Hindi category browsing, search, multiple-choice quizzes, answer explanations, and score results.
+
+Run on a connected Android device or emulator:
+
+```bash
+cd app
+flutter pub get
+flutter run
+```
+
 ## Review limits
 
 The scripts validate shape, identifiers, answer index bounds, source metadata, and build outputs. They cannot establish that every fact is true, that a translation is accurate, or that a source license allows redistribution. Human/editorial review is required before release.
