@@ -145,3 +145,30 @@ def test_gemini_retries_temporary_service_unavailable(monkeypatch):
     assert call_gemini("prompt", "test-secret", "gemini-test") == {"questions": []}
     assert calls == 3
     assert delays == [0.0, 0.0]
+
+
+def test_gemini_uses_fallback_model_after_primary_503s(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return b'{"candidates":[{"content":{"parts":[{"text":"{\\"questions\\":[]}"}]}}]}'
+
+    calls_by_model = {}
+
+    def fake_urlopen(request, timeout):
+        model = request.full_url.split("/models/")[1].split(":")[0]
+        calls_by_model[model] = calls_by_model.get(model, 0) + 1
+        if model == "primary-model":
+            raise HTTPError(request.full_url, 503, "Unavailable", Message(), io.BytesIO(b"busy"))
+        return FakeResponse()
+
+    monkeypatch.setattr("scripts.generate_questions.urlopen", fake_urlopen)
+    monkeypatch.setattr("scripts.generate_questions.time.sleep", lambda _: None)
+
+    assert call_gemini("prompt", "test-secret", "primary-model") == {"questions": []}
+    assert calls_by_model == {"primary-model": 4, "gemini-3.5-flash-lite": 1}
