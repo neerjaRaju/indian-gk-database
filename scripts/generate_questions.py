@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "generated"
-DEFAULT_MODEL = "gemini-2.5-flash"
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 
 def prompt_for(category, count, source=None):
@@ -57,7 +57,17 @@ def call_gemini(prompt, api_key, model):
         with urlopen(request, timeout=90) as response:
             result = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
-        raise ValueError(f"Gemini API returned HTTP {exc.code}") from None
+        details = exc.read(4096).decode("utf-8", errors="replace").strip()
+        details = details.replace(api_key, "[redacted]")
+        try:
+            error_payload = json.loads(details)
+            details = error_payload.get("error", {}).get("message", details)
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        if len(details) > 500:
+            details = details[:497] + "..."
+        suffix = f": {details}" if details else ""
+        raise ValueError(f"Gemini API returned HTTP {exc.code}{suffix}") from None
     except URLError as exc:
         raise ValueError(f"could not reach Gemini API: {exc.reason}") from None
     try:
