@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import date
@@ -351,7 +352,16 @@ def main():
     args.output_dir.mkdir(parents=True, exist_ok=True)
     output = args.output_dir / f"{args.category}.json"
     output.write_text(json.dumps(generated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"Generated {len(generated)} review-only records into {output}")
+    try:
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "build_database.py"), "--include-generated"],
+            cwd=ROOT,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(f"Generated JSON, but SQLite database build failed with exit code {exc.returncode}.", file=sys.stderr)
+        return 1
+    print(f"Generated {len(generated)} review-only records into {output} and refreshed dist/questions.sqlite3")
     return 0
 
 

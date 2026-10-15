@@ -5,7 +5,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from urllib.error import HTTPError
 
 from scripts.collect_sources import validate_source
-from scripts.generate_questions import call_gemini, generate_pairs, records_for, validate_pair
+from scripts.generate_questions import call_gemini, generate_pairs, main, records_for, validate_pair
 from pathlib import Path
 import json
 
@@ -155,6 +155,46 @@ def test_generation_regenerates_batch_with_non_array_options(monkeypatch):
     assert len(pairs) == 1
     assert len(prompts) == 2
     assert "previous response failed validation" in prompts[1]
+
+
+def test_generator_refreshes_sqlite_after_writing_category_json(tmp_path, monkeypatch):
+    pair = {
+        "slug": "history-founding-emperor",
+        "difficulty": "easy",
+        "question_en": "Who founded the Mughal Empire in India?",
+        "options_en": ["Babur", "Akbar", "Humayun", "Jahangir"],
+        "question_hi": "भारत में मुगल साम्राज्य की स्थापना किसने की?",
+        "options_hi": ["बाबर", "अकबर", "हुमायूँ", "जहाँगीर"],
+        "answer_index": 0,
+        "explanation_en": "Babur founded Mughal rule in India.",
+        "explanation_hi": "बाबर ने भारत में मुगल शासन की स्थापना की।",
+        "tags": ["mughal"],
+        "source_title": "Suggested history source",
+        "source_url": "https://example.gov.in/history",
+        "source_publisher": "Example Government Publisher",
+    }
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr("sys.argv", [
+        "generate_questions.py", "--category", "history", "--count", "1",
+        "--output-dir", str(tmp_path),
+    ])
+    monkeypatch.setattr("scripts.generate_questions.generate_pairs", lambda *_args, **_kwargs: [pair])
+    build_calls = []
+
+    def fake_run(command, cwd, check):
+        build_calls.append((command, cwd, check, (tmp_path / "history.json").exists()))
+
+    monkeypatch.setattr("scripts.generate_questions.subprocess.run", fake_run)
+
+    assert main() == 0
+
+    assert len(build_calls) == 1
+    command, cwd, check, json_was_written = build_calls[0]
+    assert Path(command[-2]).name == "build_database.py"
+    assert command[-1] == "--include-generated"
+    assert cwd == ROOT
+    assert check is True
+    assert json_was_written is True
 
 
 def test_generator_rejects_non_object_pair():
