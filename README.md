@@ -52,8 +52,8 @@ ORDER BY q.language, q.id;
 The generation flow uses Gemini directly to create English/Hindi MCQ pairs; it does not require a data.gov.in API key or source catalogue. Generated records stay in `data/generated/` until an editor verifies the facts, suggested citations, license, and Hindi translation, then promotes them into `data/source/`. The normal production release workflow only uses reviewed source files.
 
 1. Add the rotated `GEMINI_API_KEY` as a repository Actions secret.
-2. `Generate and release question drafts` runs every Monday at 03:00 UTC and generates 500 bilingual pairs for every configured category. A bilingual pair becomes two records, English and Hindi.
-3. To run it immediately, use Actions → `Generate and release question drafts` → Run workflow. The optional count defaults to 500 pairs per category.
+2. `Generate and release question drafts` runs daily at 03:00 UTC and generates 10 bilingual pairs for every configured category. A bilingual pair becomes two records, English and Hindi.
+3. To run it immediately, use Actions → `Generate and release question drafts` → Run workflow. No count input is needed; it generates 10 pairs per category.
 4. Each successful run creates an `ai-draft-*` GitHub prerelease with generated category JSON files and combined database files. Review each fact, suggested source URL, license, and Hindi translation before production use. Gemini-suggested citations are not verified; records use `Unverified; editorial review required`.
 5. Each run restores category JSON files from the previous AI-draft prerelease, excludes existing slugs when prompting Gemini, and prepends new records while retaining prior records. Repeated cron runs therefore accumulate questions instead of replacing the earlier set.
 
