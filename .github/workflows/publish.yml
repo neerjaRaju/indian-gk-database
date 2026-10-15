@@ -78,6 +78,7 @@ jobs:
           gh release create "${{ steps.version.outputs.value }}" \
             "indian-gk-database-${{ steps.version.outputs.value }}.tar.gz" \
             "indian-gk-database-${{ steps.version.outputs.value }}.tar.gz.sha256" \
+            dist/questions.sqlite3 \
             --title "Indian GK Database ${{ steps.version.outputs.value }}" \
             --notes "Automated validated bilingual database build from commit ${GITHUB_SHA}." \
             --target "${GITHUB_SHA}"
