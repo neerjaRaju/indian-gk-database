@@ -3,6 +3,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import date
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -13,6 +14,8 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "generated"
 DEFAULT_MODEL = "gemini-3.8-flash"
+RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
+MAX_API_ATTEMPTS = 4
 
 
 def prompt_for(category, count, source=None):
@@ -53,23 +56,32 @@ def call_gemini(prompt, api_key, model):
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         method="POST",
     )
-    try:
-        with urlopen(request, timeout=90) as response:
-            result = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        details = exc.read(4096).decode("utf-8", errors="replace").strip()
-        details = details.replace(api_key, "[redacted]")
+    for attempt in range(MAX_API_ATTEMPTS):
         try:
-            error_payload = json.loads(details)
-            details = error_payload.get("error", {}).get("message", details)
-        except (json.JSONDecodeError, AttributeError):
-            pass
-        if len(details) > 500:
-            details = details[:497] + "..."
-        suffix = f": {details}" if details else ""
-        raise ValueError(f"Gemini API returned HTTP {exc.code}{suffix}") from None
-    except URLError as exc:
-        raise ValueError(f"could not reach Gemini API: {exc.reason}") from None
+            with urlopen(request, timeout=90) as response:
+                result = json.loads(response.read().decode("utf-8"))
+            break
+        except HTTPError as exc:
+            details = exc.read(4096).decode("utf-8", errors="replace").strip()
+            details = details.replace(api_key, "[redacted]")
+            try:
+                error_payload = json.loads(details)
+                details = error_payload.get("error", {}).get("message", details)
+            except (json.JSONDecodeError, AttributeError):
+                pass
+            if len(details) > 500:
+                details = details[:497] + "..."
+            if exc.code not in RETRYABLE_HTTP_STATUSES or attempt == MAX_API_ATTEMPTS - 1:
+                suffix = f": {details}" if details else ""
+                raise ValueError(f"Gemini API returned HTTP {exc.code}{suffix}") from None
+            retry_after = exc.headers.get("Retry-After") if exc.headers else None
+            try:
+                delay = min(float(retry_after), 30) if retry_after else min(2 ** attempt, 30)
+            except ValueError:
+                delay = min(2 ** attempt, 30)
+            time.sleep(delay)
+        except URLError as exc:
+            raise ValueError(f"could not reach Gemini API: {exc.reason}") from None
     try:
         text = "".join(part["text"] for part in result["candidates"][0]["content"]["parts"])
         return json.loads(text)

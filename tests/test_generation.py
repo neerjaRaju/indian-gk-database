@@ -1,5 +1,8 @@
+import io
 import pytest
+from email.message import Message
 from jsonschema import Draft202012Validator, FormatChecker
+from urllib.error import HTTPError
 
 from scripts.collect_sources import validate_source
 from scripts.generate_questions import call_gemini, records_for, validate_pair
@@ -111,3 +114,34 @@ def test_gemini_request_keeps_key_out_of_url(monkeypatch):
     monkeypatch.setattr("scripts.generate_questions.urlopen", fake_urlopen)
 
     assert call_gemini("prompt", "test-secret", "gemini-test") == {"questions": []}
+
+
+def test_gemini_retries_temporary_service_unavailable(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return b'{"candidates":[{"content":{"parts":[{"text":"{\\"questions\\":[]}"}]}}]}'
+
+    calls = 0
+    delays = []
+
+    def fake_urlopen(request, timeout):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            headers = Message()
+            headers["Retry-After"] = "0"
+            raise HTTPError(request.full_url, 503, "Unavailable", headers, io.BytesIO(b'{"error":{"message":"busy"}}'))
+        return FakeResponse()
+
+    monkeypatch.setattr("scripts.generate_questions.urlopen", fake_urlopen)
+    monkeypatch.setattr("scripts.generate_questions.time.sleep", delays.append)
+
+    assert call_gemini("prompt", "test-secret", "gemini-test") == {"questions": []}
+    assert calls == 3
+    assert delays == [0.0, 0.0]
