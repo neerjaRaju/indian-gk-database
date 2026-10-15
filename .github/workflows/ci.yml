@@ -1,0 +1,53 @@
+name: Database CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: database-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate schema, IDs and categories
+        run: python scripts/validate_database.py
+
+      - name: Verify source metadata
+        run: python scripts/verify_sources.py
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Build static database
+        env:
+          DATABASE_VERSION: ci-${{ github.sha }}
+        run: python scripts/build_database.py
+
+      - name: Upload built database
+        uses: actions/upload-artifact@v4
+        with:
+          name: indian-gk-database-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

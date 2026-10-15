@@ -1,0 +1,83 @@
+name: Publish database
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/source/**"
+      - "data/schema/**"
+      - "config/**"
+      - "scripts/**"
+      - "requirements.txt"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: database-publish
+  cancel-in-progress: false
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Validate
+        run: |
+          python scripts/validate_database.py
+          python scripts/verify_sources.py
+          pytest -q
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="build-${GITHUB_SHA::12}"
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build database
+        env:
+          DATABASE_VERSION: ${{ steps.version.outputs.value }}
+        run: python scripts/build_database.py
+
+      - name: Package release
+        shell: bash
+        run: |
+          tar -czf "indian-gk-database-${{ steps.version.outputs.value }}.tar.gz" -C dist .
+          sha256sum "indian-gk-database-${{ steps.version.outputs.value }}.tar.gz" \
+            > "indian-gk-database-${{ steps.version.outputs.value }}.tar.gz.sha256"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.value }}" \
+            "indian-gk-database-${{ steps.version.outputs.value }}.tar.gz" \
+            "indian-gk-database-${{ steps.version.outputs.value }}.tar.gz.sha256" \
+            --title "Indian GK Database ${{ steps.version.outputs.value }}" \
+            --notes "Automated validated bilingual database build from commit ${GITHUB_SHA}." \
+            --target "${GITHUB_SHA}"

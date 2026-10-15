@@ -1,0 +1,58 @@
+[
+  {
+    "id": "ind-polity-000001",
+    "category": "polity",
+    "difficulty": "easy",
+    "type": "mcq",
+    "language": "en",
+    "question": "When did the Constitution of India come into effect?",
+    "options": [
+      "15 August 1947",
+      "26 January 1950",
+      "26 November 1949",
+      "2 October 1950"
+    ],
+    "answer_index": 1,
+    "explanation": "The Constitution of India came into effect on 26 January 1950.",
+    "tags": [
+      "constitution",
+      "republic day"
+    ],
+    "source": {
+      "title": "Constitution of India",
+      "url": "https://www.legislative.gov.in/constitution-of-indiaConstitution",
+      "publisher": "Legislative Department, Government of India",
+      "accessed_on": "2026-10-15",
+      "license": "Review source terms before redistribution"
+    },
+    "updated_at": "2026-10-15"
+  },
+  {
+    "id": "ind-polity-000002",
+    "category": "polity",
+    "difficulty": "easy",
+    "type": "mcq",
+    "language": "hi",
+    "question": "भारत का संविधान कब लागू हुआ?",
+    "options": [
+      "15 अगस्त 1947",
+      "26 जनवरी 1950",
+      "26 नवंबर 1949",
+      "2 अक्टूबर 1950"
+    ],
+    "answer_index": 1,
+    "explanation": "भारत का संविधान 26 जनवरी 1950 को लागू हुआ।",
+    "tags": [
+      "संविधान",
+      "गणतंत्र दिवस"
+    ],
+    "source": {
+      "title": "भारत का संविधान",
+      "url": "https://www.legislative.gov.in/constitution-of-indiaConstitution",
+      "publisher": "विधायी विभाग, भारत सरकार",
+      "accessed_on": "2026-10-15",
+      "license": "पुनर्वितरण से पहले स्रोत की शर्तें जाँचें"
+    },
+    "updated_at": "2026-10-15"
+  }
+]

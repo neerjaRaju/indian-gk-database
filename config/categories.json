@@ -1,0 +1,57 @@
+[
+  {
+    "id": "history",
+    "name_en": "Indian History",
+    "name_hi": "भारतीय इतिहास"
+  },
+  {
+    "id": "geography",
+    "name_en": "Indian Geography",
+    "name_hi": "भारतीय भूगोल"
+  },
+  {
+    "id": "polity",
+    "name_en": "Constitution & Polity",
+    "name_hi": "संविधान और राजव्यवस्था"
+  },
+  {
+    "id": "economy",
+    "name_en": "Indian Economy",
+    "name_hi": "भारतीय अर्थव्यवस्था"
+  },
+  {
+    "id": "science",
+    "name_en": "Science & Technology",
+    "name_hi": "विज्ञान और प्रौद्योगिकी"
+  },
+  {
+    "id": "environment",
+    "name_en": "Environment",
+    "name_hi": "पर्यावरण"
+  },
+  {
+    "id": "culture",
+    "name_en": "Art & Culture",
+    "name_hi": "कला और संस्कृति"
+  },
+  {
+    "id": "sports",
+    "name_en": "Sports",
+    "name_hi": "खेल"
+  },
+  {
+    "id": "awards",
+    "name_en": "Awards & Honours",
+    "name_hi": "पुरस्कार और सम्मान"
+  },
+  {
+    "id": "current_affairs",
+    "name_en": "Current Affairs",
+    "name_hi": "समसामयिकी"
+  },
+  {
+    "id": "miscellaneous",
+    "name_en": "Miscellaneous GK",
+    "name_hi": "विविध सामान्य ज्ञान"
+  }
+]
