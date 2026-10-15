@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "generated"
 DEFAULT_MODEL = "gemini-3.8-flash"
 FALLBACK_MODELS = ("gemini-3.5-flash-lite",)
-RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
+RETRYABLE_HTTP_STATUSES = {408, 429, 500, 502, 503, 504}
 FALLBACK_HTTP_STATUSES = {404, 429, 503}
 MAX_API_ATTEMPTS = 4
 MAX_QUESTION_PAIRS = 500
@@ -71,9 +71,14 @@ def call_gemini(prompt, api_key, model):
         )
         for attempt in range(MAX_API_ATTEMPTS):
             try:
-                with urlopen(request, timeout=90) as response:
+                with urlopen(request, timeout=180) as response:
                     result = json.loads(response.read().decode("utf-8"))
                 break
+            except TimeoutError:
+                last_service_error = f"request timed out using {candidate_model}"
+                if attempt == MAX_API_ATTEMPTS - 1:
+                    break
+                time.sleep(min(2 ** attempt, 30))
             except HTTPError as exc:
                 details = exc.read(4096).decode("utf-8", errors="replace").strip()
                 details = details.replace(api_key, "[redacted]")
@@ -98,6 +103,12 @@ def call_gemini(prompt, api_key, model):
                     delay = min(2 ** attempt, 30)
                 time.sleep(delay)
             except URLError as exc:
+                if isinstance(exc.reason, TimeoutError):
+                    last_service_error = f"request timed out using {candidate_model}"
+                    if attempt == MAX_API_ATTEMPTS - 1:
+                        break
+                    time.sleep(min(2 ** attempt, 30))
+                    continue
                 raise ValueError(f"could not reach Gemini API: {exc.reason}") from None
         if result is not None:
             break

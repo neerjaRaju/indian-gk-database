@@ -143,7 +143,7 @@ def test_gemini_request_keeps_key_out_of_url(monkeypatch):
     def fake_urlopen(request, timeout):
         assert "test-secret" not in request.full_url
         assert request.get_header("X-goog-api-key") == "test-secret"
-        assert timeout == 90
+        assert timeout == 180
         return FakeResponse()
 
     monkeypatch.setattr("scripts.generate_questions.urlopen", fake_urlopen)
@@ -196,6 +196,36 @@ def test_gemini_retries_temporary_service_unavailable(monkeypatch):
     assert call_gemini("prompt", "test-secret", "gemini-test") == {"questions": []}
     assert calls == 3
     assert delays == [0.0, 0.0]
+
+
+def test_gemini_retries_read_timeout(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return b'{"candidates":[{"content":{"parts":[{"text":"{\\"questions\\":[]}"}]}}]}'
+
+    calls = 0
+    delays = []
+
+    def fake_urlopen(_request, timeout):
+        nonlocal calls
+        assert timeout == 180
+        calls += 1
+        if calls == 1:
+            raise TimeoutError("The read operation timed out")
+        return FakeResponse()
+
+    monkeypatch.setattr("scripts.generate_questions.urlopen", fake_urlopen)
+    monkeypatch.setattr("scripts.generate_questions.time.sleep", delays.append)
+
+    assert call_gemini("prompt", "test-secret", "gemini-test") == {"questions": []}
+    assert calls == 2
+    assert delays == [1]
 
 
 def test_gemini_uses_fallback_model_after_primary_503s(monkeypatch):
