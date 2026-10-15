@@ -39,14 +39,14 @@ Generated output appears in `dist/`: full database, English-only and Hindi-only 
 
 ## Generate a review candidate with Gemini
 
-The optional generation flow uses `scripts/collect_sources.py` to fetch source text and `scripts/generate_questions.py` to create English/Hindi MCQ pairs. Generated records stay in `data/generated/` until an editor reviews and promotes them into `data/source/`; the normal CI and release workflows only use reviewed source files.
+The generation flow uses Gemini directly to create English/Hindi MCQ pairs; it does not require a data.gov.in API key or source catalogue. Generated records stay in `data/generated/` until an editor verifies the facts, suggested citations, license, and Hindi translation, then promotes them into `data/source/`. The normal CI and release workflows only use reviewed source files.
 
-1. Add entries to `config/source_catalog.json` only after checking the source's reuse terms. Each entry needs `id`, `category`, `title`, `publisher`, `url`, `license`, `license_url`, and `reuse_approved: true`. The collector accepts only HTTPS HTML/plain-text pages and the license labels `CC0-1.0`, `CC-BY-4.0`, `Government Open Data License - India (GODL)`, or `Public Domain`. This allowlist does not replace a human license review.
-2. Set `GEMINI_API_KEY` in the local environment, or add it as a repository Actions secret named `GEMINI_API_KEY` for the manual workflow.
-3. Run `python scripts/collect_sources.py`, then `python scripts/generate_questions.py --category economy --count 2`.
-4. Review the generated questions for accuracy and Hindi translation. Validate/build a candidate with `python scripts/validate_database.py --include-generated` and `python scripts/build_database.py --include-generated`.
+1. Set `GEMINI_API_KEY` in the local environment, or add it as a repository Actions secret named `GEMINI_API_KEY` for the manual workflow.
+2. Run `python scripts/generate_questions.py --category economy --count 2`, or start `Generate database candidate` from the Actions tab.
+3. Review each generated fact, suggested source URL, license, and Hindi translation. Gemini-suggested citations are not verified; generated records use `Unverified; editorial review required` as the license until a human checks and replaces it.
+4. Validate/build a review candidate with `python scripts/validate_database.py --include-generated` and `python scripts/build_database.py --include-generated`.
 
-The `Generate database candidate` GitHub Actions workflow runs manually from the Actions tab and uploads a candidate artifact. It does not commit or release generated questions. The source catalogue contains one reviewed economy resource; add and review more entries for other categories as needed.
+The `Generate database candidate` GitHub Actions workflow runs manually from the Actions tab and uploads a candidate artifact. It does not commit or release generated questions. `scripts/collect_sources.py` remains available for optional source-grounded runs: add reviewed HTTPS HTML/plain-text sources to `config/source_catalog.json`, collect them, then pass `--sources data/collected/sources.json` to the generator. That optional path uses no data.gov.in API key.
 
 ## GitHub setup
 

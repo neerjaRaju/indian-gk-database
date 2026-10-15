@@ -20,7 +20,7 @@ on:
           - current_affairs
           - miscellaneous
       count:
-        description: Question pairs per approved source
+        description: Number of question pairs to generate
         required: true
         default: "2"
         type: number
@@ -48,9 +48,6 @@ jobs:
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
-
-      - name: Collect approved source material
-        run: python scripts/collect_sources.py
 
       - name: Generate bilingual questions with Gemini
         env:

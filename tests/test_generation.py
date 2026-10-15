@@ -60,6 +60,32 @@ def test_generated_pair_becomes_two_schema_shaped_records():
     assert all(not list(validator.iter_errors(record)) for record in records)
 
 
+def test_gemini_only_pair_becomes_unverified_review_draft():
+    pair = {
+        "slug": "gva-agriculture-share",
+        "difficulty": "easy",
+        "question_en": "What share did agriculture and allied sectors contribute to GVA in 2020-21?",
+        "options_en": ["20.4%", "18.3%", "17.6%", "18.9%"],
+        "question_hi": "2020-21 में कृषि और संबद्ध क्षेत्रों का GVA में कितना हिस्सा था?",
+        "options_hi": ["20.4%", "18.3%", "17.6%", "18.9%"],
+        "answer_index": 0,
+        "explanation_en": "The suggested source reports a 20.4 percent share for 2020-21.",
+        "explanation_hi": "सुझाए गए स्रोत में 2020-21 के लिए 20.4 प्रतिशत हिस्सा दिया गया है।",
+        "tags": ["gva", "agriculture"],
+        "source_title": "Agriculture share in total GVA",
+        "source_url": "https://example.gov.in/economy/gva",
+        "source_publisher": "Example Government Publisher",
+    }
+
+    records = records_for(None, [pair], "2026-10-15", category="economy")
+
+    assert [record["language"] for record in records] == ["en", "hi"]
+    assert all(record["source"]["license"].startswith("Unverified") for record in records)
+    schema = json.loads((ROOT / "data" / "schema" / "question.schema.json").read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema, format_checker=FormatChecker())
+    assert all(not list(validator.iter_errors(record)) for record in records)
+
+
 def test_generator_rejects_non_object_pair():
     with pytest.raises(ValueError, match="must be an object"):
         validate_pair([])

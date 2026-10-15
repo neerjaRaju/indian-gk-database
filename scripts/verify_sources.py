@@ -9,7 +9,7 @@ for path in sorted((ROOT / "data/source").glob("*.json")):
         for field in ("title", "url", "publisher", "accessed_on", "license"):
             if not src.get(field):
                 issues.append(f"{path.name}[{i}] ({q.get('id')}): missing source.{field}")
-        if src.get("license", "").lower().startswith(("unknown", "todo", "tbd")):
+        if src.get("license", "").lower().startswith(("unknown", "todo", "tbd", "unverified")):
             issues.append(f"{path.name}[{i}] ({q.get('id')}): source license needs review")
 if issues:
     raise SystemExit("\n".join(issues))
